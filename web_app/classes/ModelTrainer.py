@@ -1,4 +1,4 @@
-import pandas as pd
+import os
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split, GridSearchCV
@@ -10,7 +10,6 @@ from sklearn.pipeline import Pipeline
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 import streamlit as st
 
-
 class ModelTrainer:
     def __init__(self, model_name, driving_factors, city, year):
         self.model_name = model_name
@@ -21,32 +20,38 @@ class ModelTrainer:
 
     def load_data(self):
         city_mapping = {"Bangalore":"blr", "Delhi":"del"}
-        print(self.model_name, self.city, self.year)
-        df = pd.read_csv(
-            "Data/" + city_mapping[self.city] + "/with_ground(in)_" + self.year + ".csv", 
-            encoding='unicode_escape'
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        csv_path = os.path.join(
+            project_root, 
+            "Data", 
+            city_mapping[self.city], 
+            f"with_ground(in)_{self.year}.csv"
         )
-        
-        df = df.dropna()
-        print("Data/" + city_mapping[self.city] + "/with_ground(in)_" + self.year + ".csv")
+        df = pd.read_csv(csv_path, encoding='unicode_escape').dropna()
         return df
 
     def preprocess_data(self):
         df = self.df.copy()
-        y = df['Monthly_avg_ground_data (micro g/m^3)'] #Monthly_avg_ground_data (micro g/m^3)
-        
+        y = df['Monthly_avg_ground_data (micro g/m^3)']
+
         try:
-            x = df.drop(columns=['Monthly_avg_ground_data (micro g/m^3)', "NAME", "geometry", "Month", "LandUse_0", "LandUse_3", "LandUse_13", "LandUse_14", "LandUse_15", "LandUse_24"])
+            x = df.drop(columns=['Monthly_avg_ground_data (micro g/m^3)', "NAME", "geometry", "Month",
+                                 "LandUse_0", "LandUse_3", "LandUse_13", "LandUse_14", "LandUse_15", "LandUse_24"])
         except KeyError:
             x = df.drop(columns=['Monthly_avg_ground_data (micro g/m^3)', "NAME", "geometry", "Month"])
-            
+        
         # Drop factors not selected
-        for key in self.driving_factors:
-            #st.write(key, self.driving_factors[key])
-            if not self.driving_factors[key]:
+        for key, selected in self.driving_factors.items():
+            if not selected and key in x.columns:
                 x.drop(key, axis=1, inplace=True)
+        
+        # Keep only numeric columns
+        x = x.select_dtypes(include=[np.number])
 
-        # Split data into train and test sets
+        if x.shape[1] == 0:
+            raise ValueError("No driving factors found. Select at least one driving factor.")
+
+        # Split data
         x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=0.7, random_state=31)
         return x_train, x_test, y_train, y_test
 
@@ -71,7 +76,6 @@ class ModelTrainer:
 
     def gradient_boosting(self, x_train, y_train, x_test):
         np.random.seed(55)
-
         param_grid = {
             'n_estimators': [25, 50, 100, 200],
             'learning_rate': [0.1, 0.01, 0.001],
@@ -85,10 +89,7 @@ class ModelTrainer:
         return best_model, y_pred
 
     def linear_regression(self, x_train, y_train, x_test):
-        param_grid = {
-            'linear__fit_intercept': [True, False]
-        }
-
+        param_grid = {'linear__fit_intercept': [True, False]}
         pipeline = Pipeline([
             ('scaler', StandardScaler()),
             ('linear', LinearRegression())
@@ -135,5 +136,5 @@ class ModelTrainer:
         mae = mean_absolute_error(y_test, y_pred)
         mse = mean_squared_error(y_test, y_pred)
         mape = self.mean_absolute_percentage_error(y_test, y_pred)
-        rmse = mean_squared_error(y_test, y_pred, squared=False)
+        rmse = np.sqrt(mse)
         return {"R2": r2, "MAE": mae, "MSE": mse, "MAPE": mape, "RMSE": rmse}
