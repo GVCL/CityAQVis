@@ -11,3 +11,6 @@ We have used streamlit to build this application. We developed an interactive sa
 compare, and visualize NO2 predictions across urban areas. This tool allows for flexible experimentation with different machine learning models and datasets, making it adaptable to various cities and pollutants.
 
 Refer to [webapp readme](/web_app/readme.md) for the detailed description and setup.
+
+## License
+This project is licensed under the MIT License.
